@@ -3,30 +3,48 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 use ExamPilot\Config;
 use ExamPilot\Db;
+use ExamPilot\Handlers;
+use ExamPilot\Channels\ChannelFactory;
 use ExamPilot\Services\PaystackService;
+
 Config::load(dirname(__DIR__));
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $uri = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
 $json = static function (int $code, array $body): void {
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($body);
-    exit;
+    echo json_encode($body); exit;
 };
+
 if ($uri === '/health') { $json(200, ['status' => 'ok']); }
 if ($uri === '/' && $method === 'GET') {
     header('Content-Type: text/html; charset=utf-8');
-    require __DIR__ . '/../views/landing.php';
-    exit;
+    require __DIR__ . '/../views/landing.php'; exit;
 }
+
 if ($method === 'POST' && preg_match('#^/webhook/telegram/([^/]+)$#', $uri, $m) === 1) {
     $expected = (string) Config::get('TELEGRAM_WEBHOOK_SECRET', '');
     if ($expected === '' || !hash_equals($expected, $m[1])) { $json(403, ['error' => 'forbidden']); }
     $raw = (string) file_get_contents('php://input');
     if ($raw === '') { $json(200, ['ok' => true]); }
+    
+    $data = json_decode($raw, true);
+    
+    // 1. Save to queue for historical records
     Db::pdo()->prepare("INSERT INTO messages_queue (channel, raw_json, status, created_at) VALUES ('telegram', :r, 'pending', NOW())")->execute([':r' => $raw]);
+    
+    // 2. Process instantly to avoid cron delay
+    try {
+        $channel = ChannelFactory::make('telegram');
+        $ctx = $channel->parseUpdate($data);
+        if ($ctx) { Handlers::handle($ctx, $channel); }
+    } catch (\Throwable $e) { 
+        error_log('Inline: ' . $e->getMessage()); 
+    }
+    
     $json(200, ['ok' => true]);
 }
+
 if ($method === 'GET' && preg_match('#^/webhook/whatsapp/([^/]+)$#', $uri, $m) === 1) {
     $expected = (string) Config::get('WHATSAPP_WEBHOOK_SECRET', '');
     if ($expected === '' || !hash_equals($expected, $m[1])) { $json(403, ['error' => 'forbidden']); }
@@ -38,6 +56,7 @@ if ($method === 'GET' && preg_match('#^/webhook/whatsapp/([^/]+)$#', $uri, $m) =
     }
     $json(403, ['error' => 'verify failed']);
 }
+
 if ($method === 'POST' && preg_match('#^/webhook/whatsapp/([^/]+)$#', $uri, $m) === 1) {
     $expected = (string) Config::get('WHATSAPP_WEBHOOK_SECRET', '');
     if ($expected === '' || !hash_equals($expected, $m[1])) { $json(403, ['error' => 'forbidden']); }
@@ -46,6 +65,7 @@ if ($method === 'POST' && preg_match('#^/webhook/whatsapp/([^/]+)$#', $uri, $m) 
     Db::pdo()->prepare("INSERT INTO messages_queue (channel, raw_json, status, created_at) VALUES ('whatsapp', :r, 'pending', NOW())")->execute([':r' => $raw]);
     $json(200, ['ok' => true]);
 }
+
 if ($method === 'POST' && $uri === '/paystack/webhook') {
     $raw = (string) file_get_contents('php://input');
     $sig = (string) ($_SERVER['HTTP_X_PAYSTACK_SIGNATURE'] ?? '');
@@ -57,4 +77,14 @@ if ($method === 'POST' && $uri === '/paystack/webhook') {
     }
     $json(200, ['ok' => true]);
 }
+
+if ($method === 'POST' && preg_match('#^/cron_(worker|scheduler)$#', $uri, $m) === 1) {
+    $expected = (string) Config::get('CRON_SECRET', '');
+    if ($expected === '' || !hash_equals($expected, $_GET['secret'] ?? '')) { $json(403, ['error' => 'forbidden']); }
+    ob_start();
+    require __DIR__ . "/../bin/{$m[1]}.php";
+    $out = ob_get_clean();
+    $json(200, ['ok' => true, 'output' => $out]);
+}
+
 http_response_code(404); header('Content-Type: text/plain'); echo 'Not found';
