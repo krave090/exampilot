@@ -125,12 +125,12 @@ final class Handlers
                 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $text)) { $channel->send($ctx->recipientId, 'Please use YYYY-MM-DD format.'); return; }
                 $data['exam_date'] = $text;
                 self::setState($pdo, (int) $user['id'], 'await_outline', $data);
-                $channel->send($ctx->recipientId, "Paste the course outline, or send 'skip'.");
+                $channel->send($ctx->recipientId, "Paste the course outline, OR upload a PDF file (send 'skip' to skip).");
                 return;
             case 'await_outline':
                 $data['outline'] = strtolower($text) === 'skip' ? '' : $text;
                 self::setState($pdo, (int) $user['id'], 'await_past_questions', $data);
-                $channel->send($ctx->recipientId, "Paste past questions (one per line), or send 'skip'.");
+                $channel->send($ctx->recipientId, "Paste past questions, OR upload a PDF file (send 'skip' to skip).");
                 return;
             case 'await_past_questions':
                 $pqText = strtolower($text) === 'skip' ? '' : $text;
