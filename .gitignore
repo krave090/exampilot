@@ -1,4 +1,5 @@
-/vendor/
-.env
-.DS_Store
-*.log
+/vendor/ 
+.env 
+.DS_Store 
+*.log 
+project_snapshot.txt 
