@@ -1,0 +1,16 @@
+name: ExamPilot Cron Jobs 
+on: 
+  schedule: 
+    - cron: '*/5 * * * *' 
+  workflow_dispatch: 
+ 
+jobs: 
+  run-cron: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - name: Keep Alive 
+        run: curl -s --max-time 60 https://YOUR-RENDER-APP-NAME.onrender.com/health > /dev/null 
+      - name: Run Worker 
+        run: curl -s --max-time 60 "https://YOUR-RENDER-APP-NAME.onrender.com/cron_worker.php?secret=MySuperSecretPassword123" > /dev/null 
+      - name: Run Scheduler 
+        run: curl -s --max-time 60 "https://YOUR-RENDER-APP-NAME.onrender.com/cron_scheduler.php?secret=MySuperSecretPassword123" > /dev/null 
