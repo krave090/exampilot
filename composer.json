@@ -1,0 +1,25 @@
+{
+    "name": "exampilot/exampilot",
+    "description": "ExamPilot — messaging bot for Nigerian university students",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "ext-pdo": "*",
+        "guzzlehttp/guzzle": "^7.8",
+        "smalot/pdfparser": "^2.10",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "suggest": {
+        "ext-pdo_mysql": "Required when DB_CONNECTION=mysql (local XAMPP)",
+        "ext-pdo_pgsql": "Required when DB_CONNECTION=pgsql (production Neon)"
+    },
+    "autoload": {
+        "psr-4": {
+            "ExamPilot\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

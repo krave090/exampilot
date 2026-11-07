@@ -1,0 +1,2 @@
+#!/bin/bash 
+/c/xampp/php/php.exe /c/xampp/php/composer.phar "$@" 
