@@ -26,12 +26,12 @@ if ($method === 'POST' && preg_match('#^/webhook/telegram/([^/]+)$#', $uri, $m) 
     $expected = (string) Config::get('TELEGRAM_WEBHOOK_SECRET', '');
     if ($expected === '' || !hash_equals($expected, $m[1])) { $json(403, ['error' => 'forbidden']); }
     $raw = (string) file_get_contents('php://input');
-    if ($raw === '') { $json(200, ['ok' => true]); }
+    if ($raw === '') { \$pdo->prepare("UPDATE messages_queue SET status = 'done', processed_at = NOW() WHERE id = :id")->execute([' :id' => \$queueId]); \$json(200, ['ok' => true]); }
     
-    $data = json_decode($raw, true);
+    \$data = json_decode(\$raw, true); \$pdo = Db::pdo();
     
     // 1. Save to queue for historical records
-    Db::pdo()->prepare("INSERT INTO messages_queue (channel, raw_json, status, created_at) VALUES ('telegram', :r, 'pending', NOW())")->execute([':r' => $raw]);
+    \$stmt = \$pdo->prepare("INSERT INTO messages_queue (channel, raw_json, status, created_at) VALUES ('telegram', :r, 'pending', NOW())"); \$stmt->execute([' :r' => \$raw]); \$queueId = (int)\$pdo->lastInsertId();
     
     // 2. Process instantly to avoid cron delay
     try {
@@ -39,10 +39,10 @@ if ($method === 'POST' && preg_match('#^/webhook/telegram/([^/]+)$#', $uri, $m) 
         $ctx = $channel->parseUpdate($data);
         if ($ctx) { Handlers::handle($ctx, $channel); }
     } catch (\Throwable $e) { 
-        error_log('Inline: ' . $e->getMessage()); 
+        error_log('Inline: ' . \$e->getMessage()); 
     }
     
-    $json(200, ['ok' => true]);
+    \$pdo->prepare("UPDATE messages_queue SET status = 'done', processed_at = NOW() WHERE id = :id")->execute([' :id' => \$queueId]); \$json(200, ['ok' => true]);
 }
 
 if ($method === 'GET' && preg_match('#^/webhook/whatsapp/([^/]+)$#', $uri, $m) === 1) {
@@ -61,9 +61,9 @@ if ($method === 'POST' && preg_match('#^/webhook/whatsapp/([^/]+)$#', $uri, $m) 
     $expected = (string) Config::get('WHATSAPP_WEBHOOK_SECRET', '');
     if ($expected === '' || !hash_equals($expected, $m[1])) { $json(403, ['error' => 'forbidden']); }
     $raw = (string) file_get_contents('php://input');
-    if ($raw === '') { $json(200, ['ok' => true]); }
+    if ($raw === '') { \$pdo->prepare("UPDATE messages_queue SET status = 'done', processed_at = NOW() WHERE id = :id")->execute([' :id' => \$queueId]); \$json(200, ['ok' => true]); }
     Db::pdo()->prepare("INSERT INTO messages_queue (channel, raw_json, status, created_at) VALUES ('whatsapp', :r, 'pending', NOW())")->execute([':r' => $raw]);
-    $json(200, ['ok' => true]);
+    \$pdo->prepare("UPDATE messages_queue SET status = 'done', processed_at = NOW() WHERE id = :id")->execute([' :id' => \$queueId]); \$json(200, ['ok' => true]);
 }
 
 if ($method === 'POST' && $uri === '/paystack/webhook') {
@@ -75,7 +75,7 @@ if ($method === 'POST' && $uri === '/paystack/webhook') {
     if (is_array($event) && ($event['event'] ?? '') === 'charge.success') {
         try { $svc->processChargeSuccess($event); } catch (\Throwable $e) { error_log('Paystack: ' . $e->getMessage()); }
     }
-    $json(200, ['ok' => true]);
+    \$pdo->prepare("UPDATE messages_queue SET status = 'done', processed_at = NOW() WHERE id = :id")->execute([' :id' => \$queueId]); \$json(200, ['ok' => true]);
 }
 
 if ($method === 'POST' && preg_match('#^/cron_(worker|scheduler)$#', $uri, $m) === 1) {
