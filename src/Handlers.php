@@ -40,6 +40,10 @@ final class Handlers
             $channel->send($ctx->recipientId, self::generateToday($pdo, $user));
             return;
         }
+        if (self::isCommand($text, '/quiz')) {
+            $channel->send($ctx->recipientId, self::generateQuiz($pdo, $user));
+            return;
+        }
         if (self::isCommand($text, '/plan')) {
             $parts = preg_split('/\s+/', $text) ?: [];
             $time = (string) ($parts[1] ?? '');
@@ -214,6 +218,7 @@ final class Handlers
             . "• /addcourse — add a course\n"
             . "• /courses — list courses\n"
             . "• /today — generate today's plan\n"
+            . "• /quiz — test yourself with 3 AI questions\n"
             . "• /plan HH:MM — set daily time (currently " . (string) $user['plan_time'] . ")\n"
             . "• /upgrade — paid plans\n"
             . "• /help — help\n\n"
@@ -222,7 +227,7 @@ final class Handlers
 
     private static function helpText(): string
     {
-        return "ExamPilot help:\n\n/start /addcourse /courses /today /plan HH:MM /upgrade /cancel\n\nOr just type a question.";
+        return "ExamPilot help:\n\n/start /addcourse /courses /today /quiz /plan HH:MM /upgrade /cancel\n\nOr just type a question.";
     }
 
     private static function listCourses(\PDO $pdo, int $userId): string
@@ -253,6 +258,23 @@ final class Handlers
         return "☀️ Here's your plan for today:\n\n" . implode("\n\n---\n\n", $chunks);
     }
 
+    private static function generateQuiz(\PDO $pdo, array $user): string
+    {
+        $stmt = $pdo->prepare('SELECT * FROM courses WHERE user_id = :uid ORDER BY id ASC');
+        $stmt->execute([':uid' => $user['id']]);
+        $courses = $stmt->fetchAll();
+        if (!is_array($courses) || $courses === []) { return 'No courses yet. Add one with /addcourse.'; }
+        $chosen = $courses[0];
+        
+        $context = trim((string) $chosen['outline']);
+        if ($context === '') { $context = 'Course: ' . $chosen['code'] . ' ' . $chosen['title']; }
+        
+        $prompt = "Generate 3 exam-style questions for this course based on the outline below. Do not include answers yet, just the questions.\n\nContext:\n" . $context;
+        
+        $ai = new AiClient();
+        return "📝 Practice Quiz:\n\n" . $ai->answer($prompt, $context);
+    }
+
     private static function upgradeText(): string
     {
         $link = (string) Config::get('PAYSTACK_PAYMENT_LINK', '');
@@ -262,4 +284,3 @@ final class Handlers
         return implode("\n", $lines);
     }
 }
-
