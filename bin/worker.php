@@ -5,13 +5,19 @@ use ExamPilot\Channels\ChannelFactory;
 use ExamPilot\Config;
 use ExamPilot\Db;
 use ExamPilot\Handlers;
+
 Config::load(dirname(__DIR__));
 set_time_limit(50);
+
 $pdo = Db::pdo();
-$stmt = $pdo->prepare("SELECT id, channel, raw_json FROM messages_queue WHERE status = 'pending' ORDER BY id ASC LIMIT 20");
+// ONLY pick up 'pending' messages that are older than 2 minutes. 
+// This prevents the cron job from racing the instant webhook.
+$stmt = $pdo->prepare("SELECT id, channel, raw_json FROM messages_queue WHERE status = 'pending' AND created_at < NOW() - INTERVAL '2 minutes' ORDER BY id ASC LIMIT 20");
 $stmt->execute();
 $rows = $stmt->fetchAll();
+
 $processed = 0; $failed = 0;
+
 foreach ($rows as $row) {
     try {
         $raw = json_decode((string) $row['raw_json'], true);

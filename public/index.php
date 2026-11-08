@@ -25,14 +25,25 @@ if ($uri === '/' && $method === 'GET') {
 if ($method === 'POST' && preg_match('#^/webhook/telegram/([^/]+)$#', $uri, $m) === 1) {
     $expected = (string) Config::get('TELEGRAM_WEBHOOK_SECRET', '');
     if ($expected === '' || !hash_equals($expected, $m[1])) { $json(403, ['error' => 'forbidden']); }
+    
     $raw = (string) file_get_contents('php://input');
     if ($raw === '') { $json(200, ['ok' => true]); }
     
     $data = json_decode($raw, true);
+    $updateId = $data['update_id'] ?? 0;
     $pdo = Db::pdo();
     
-    // 1. Save to queue
-    $stmt = $pdo->prepare("INSERT INTO messages_queue (channel, raw_json, status, created_at) VALUES ('telegram', :r, 'pending', NOW())");
+    // CHECK 1: Has Telegram already sent us this exact message? (Stops Telegram retries)
+    if ($updateId > 0) {
+        $check = $pdo->prepare("SELECT id FROM messages_queue WHERE raw_json LIKE :u LIMIT 1");
+        $check->execute([':u' => '%"update_id":' . $updateId . '%']);
+        if ($check->fetchColumn()) {
+            $json(200, ['ok' => true]); 
+        }
+    }
+    
+    // 1. Save to queue as 'processing' immediately
+    $stmt = $pdo->prepare("INSERT INTO messages_queue (channel, raw_json, status, created_at) VALUES ('telegram', :r, 'processing', NOW())");
     $stmt->execute([':r' => $raw]);
     $queueId = (int) $pdo->lastInsertId();
     
@@ -41,14 +52,16 @@ if ($method === 'POST' && preg_match('#^/webhook/telegram/([^/]+)$#', $uri, $m) 
         $channel = ChannelFactory::make('telegram');
         $ctx = $channel->parseUpdate($data);
         if ($ctx) { Handlers::handle($ctx, $channel); }
+        
+        // 3. Mark as done when finished
+        $pdo->prepare("UPDATE messages_queue SET status = 'done', processed_at = NOW() WHERE id = :id")
+            ->execute([':id' => $queueId]);
     } catch (\Throwable $e) { 
         error_log('Inline: ' . $e->getMessage()); 
+        $pdo->prepare("UPDATE messages_queue SET status = 'failed', processed_at = NOW() WHERE id = :id")
+            ->execute([':id' => $queueId]);
     }
     
-    // 3. Mark as done so cron doesn't double-send
-    $pdo->prepare("UPDATE messages_queue SET status = 'done', processed_at = NOW() WHERE id = :id")
-        ->execute([':id' => $queueId]);
-        
     $json(200, ['ok' => true]);
 }
 
