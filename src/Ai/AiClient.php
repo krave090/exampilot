@@ -17,11 +17,11 @@ final class AiClient
     {
         $url = Config::get('AI_API_URL');
         $key = Config::get('AI_API_KEY');
-        $model = Config::get('AI_MODEL', 'gpt-4o-mini');
+        $model = Config::get('AI_MODEL', 'llama-3.1-8b-instant');
 
-        if ($url === null || $key === null) {
-            return $this->fallback($question, $courseContext);
-        }
+        // Debugging checks
+        if ($url === null) { return '❌ DEBUG: AI_API_URL is missing in Render.'; }
+        if ($key === null) { return '❌ DEBUG: AI_API_KEY is missing in Render.'; }
 
         $system = "You are ExamPilot, a study assistant for Nigerian university students. "
             . "Answer ONLY using the provided course context when possible. Be concise (max ~200 words).\n\n"
@@ -49,20 +49,10 @@ final class AiClient
                     return trim($text);
                 }
             }
-            return $this->fallback($question, $courseContext);
+            return '❌ DEBUG: API returned empty response.';
         } catch (\Throwable $e) {
-            return $this->fallback($question, $courseContext);
+            // This will show us the EXACT error from Groq
+            return '❌ DEBUG ERROR: ' . $e->getMessage();
         }
-    }
-
-    private function fallback(string $question, string $courseContext): string
-    {
-        $snippet = trim($courseContext);
-        if ($snippet === '') {
-            $snippet = 'No course context uploaded yet.';
-        } elseif (strlen($snippet) > 600) {
-            $snippet = substr($snippet, 0, 600) . '...';
-        }
-        return "AI is not configured on this server yet. Here is what your uploads cover:\n\n" . $snippet;
     }
 }
